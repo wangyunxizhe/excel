@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>导入列表</title>
+        <link rel="stylesheet" type="text/css" th:href="@{/static/css/common.css}"/>
+        <script th:src="@{/static/js/jquery-easyui-1.2.6/jquery-1.7.2.min.js}"></script>
+        <link rel="stylesheet" type="text/css" th:href="@{/static/js/jquery-easyui-1.2.6/themes/default/easyui.css}"/>
+        <link rel="stylesheet" type="text/css" th:href="@{/static/js/jquery-easyui-1.2.6/themes/icon.css}"/>
+        <script th:src="@{/static/js/jquery-easyui-1.2.6/jquery.easyui.min.js}"></script>
+        <script th:src="@{/static/js/jquery-easyui-1.2.6/locale/easyui-lang-zh_CN.js}"></script>
+        <script th:src="@{/static/js/commons.js}"></script>
+        <link rel="stylesheet" type="text/css" th:href="@{/static/css/uploadify.css}"/>
+        <script th:src="@{/static/js/swfobject.js}"></script>
+        <script th:src="@{/static/js/jquery.uploadify.v2.1.0.min.js}"></script>
+    </head>
+
+<body>
+<!-- 数据列表区域 -->
+<div id="lay" class="easyui-layout" style="width:100%;height:575px;">
+    <div region="center">
+        <table id="t_importdata"></table>
+    </div>
+</div>
+<!-- 导入模板弹窗 -->
+<div id="templateDialog" title="选择模板" modal=true draggable=false
+     class="easyui-dialog" closed=true style="width: 350px;height:220px">
+    <form action="">
+        <table>
+            <tr>
+                <td>选择模板：</td>
+                <td>
+                    <input id="templates" name="templates" class="easyui-combobox" panelHeight="auto"
+                           url="gettemplates" valueField="templateId" textField="templateName" value=""/>
+                    <a id="okBtn" class="easyui-linkbutton">确定</a>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+<!-- 选择完导入模板之后的弹窗 -->
+<div id="importDialog" title="导入Excel" modal=true draggable=false class="easyui-dialog" closed=true
+     style="width:400px;height:220px;">
+    <form id="importForm" action="doupload" method="post" enctype="multipart/form-data">
+        <table>
+            <tr>
+                <td>下载模板:</td>
+                <td>
+                    <a id="downloadTemplate">导入模板</a>
+                </td>
+            </tr>
+            <tr>
+                <td>浏览:</td>
+                <td>
+                    <input id="fileInput" name="fileInput" type="file"/>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <div id="fileQueue"></div>
+                    <a id="uploadBtn" class="easyui-linkbutton">导入</a>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+
+<div id="importDetailsDialog" title="导入明细查看" modal=true draggable=false class="easyui-dialog" closed=true
+     style="width:1400px;height:400px;">
+    <div id="divDataGrid" style="width:1300px;height:500px;"></div>
+</div>
+</body>
+
+<script type="text/javascript" th:inline="none">
+    $(function () {
+
+        /**
+         *    初始化数据表格
+         */
+        $('#t_importdata').datagrid({
+            idField: 'id',
+            title: '数据列表',
+            fit: true,
+            height: 450,
+            url: '/list',
+            fitColumns: true,
+            striped: true,					//隔行变色特性
+            loadMsg: '数据正在加载,请耐心的等待...',
+            rownumbers: true,
+            //冻结列特性 ,不要与fitColumns 特性一起使用
+            frozenColumns: [[
+                {field: 'ck', width: 50, checkbox: true}
+            ]],
+            columns: [[
+                {field: 'importid', title: '主表id', width: 100, hidden: true},
+                {field: 'importDataType', title: '数据类型', width: 100, sortable: true},
+                {field: 'importDate', title: '导入时间', width: 100, sortable: true},
+                {
+                    field: 'importStatus', title: '导入标志', width: 100,
+                    formatter: function (value, record, index) {
+                        if (value == 1) {
+                            return '导入成功';
+                        } else if (value == 0) {
+                            return '导入失败';
+                        }
+                    }
+                },
+                {field: 'handleDate', title: '处理时间', width: 100},
+                {
+                    field: 'handleStatus', title: '处理标志', width: 100,
+                    formatter: function (value, record, index) {
+                        if (value == 1) {
+                            return '已处理';
+                        } else if (value == 0) {
+                            return '未处理';
+                        }
+                    }
+                }
+            ]],
+            pagination: true,
+            pageSize: 10,
+            pageList: [5, 10, 15, 20, 50],
+            toolbar: [
+                {
+                    text: '导入模板',
+                    iconCls: 'icon-add',
+                    handler: function () {
+                        $('#templateDialog').dialog('open');
+                    }
+                },
+                {
+                    text: '导入明细查看',
+                    iconCls: 'icon-edit',
+                    handler: function () {
+                        //动态创建datagrid
+                        $('#divDataGrid').html('<table id="tatalTb" style="width:1300px;height:500px;"></table>');
+                        var arr = $('#t_importdata').datagrid('getSelections');
+                        if (arr.length != 1) {
+                            $.messager.alert('提示信息', '只能选择一条记录进行查看！');
+                            return;
+                        } else {
+                            $('#importDetailsDialog').dialog('open');
+                            $.ajax({
+                                url: 'columns',
+                                type: 'POST',
+                                dataType: 'json',
+                                data: {templateId: arr[0].importDataType},
+                                success: function (data) {
+                                    $('#tatalTb').datagrid({
+                                        url: 'columndatas',
+                                        fitColumns: true,
+                                        idField: "appId",
+                                        columns: [data],
+                                        queryParams: {importDataId: arr[0].importid},
+                                        toolbar: [
+                                            {
+                                                text: '确认导入',
+                                                iconCls: 'icon-add',
+                                                handler: function () {
+                                                    //只有未处理并且没有错误代码的数据允许确认导入
+                                                    var detailDatas = $('#tatalTb').datagrid('getData');
+                                                    for (var i = 0; i < detailDatas.total; i++) {
+                                                        var cgbz = detailDatas.rows[i].cgbz;
+                                                        var hcode = detailDatas.rows[i].hcode;
+                                                        if (cgbz != "未处理" || (hcode.indexOf("#000") >= 0)) {
+                                                            $.messager.alert("提示信息",
+                                                                "已处理或数据有误，请核对后再重新导入！");
+                                                            return;
+                                                        }
+                                                    }
+
+                                                    $.ajax({
+                                                        url: 'doimport',
+                                                        type: "POST",
+                                                        dataType: 'json',
+                                                        data: {importDataId: arr[0].importid},
+                                                        success: function (data) {
+                                                            var status = data.status;
+                                                            var message = data.message;
+                                                            if (status == "ok") {
+                                                                $.messager.alert("提示信息", message);
+                                                                $('#tatalTb').datagrid('reload', null);
+                                                            } else {
+                                                                $.messager.alert("提示信息", message);
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                            }, {
+                                                text: '返回',
+                                                iconCls: 'icon-back',
+                                                handler: function () {
+                                                    $('#importDetailsDialog').dialog('close');
+                                                }
+                                            }
+                                        ]
+
+                                    });
+                                }
+
+                            });
+                        }
+                    }
+                }
+            ]
+        });
+
+        $('#okBtn').click(function () {
+            //获取选择模板ID
+            var str = $('#templates').combobox('getValue');
+            $('#templateDialog').dialog('close');//关闭导入模板弹窗
+            $('#importDialog').dialog('open');//打开第二弹窗
+            var val = "download?templateId=" + str;
+            $('#downloadTemplate').attr('href', val);
+        });
+
+        //文件上传uploadify
+        $('#fileInput').uploadify({
+            'uploader': 'static/js/swf/uploadify.swf', //uploadify.swf文件的相对路径
+            'script': 'doupload',   //指定服务端处理类的入口
+            'scriptData': {'templateId': $('#templates').combobox('getValue')},
+            'folder': 'default', //上传文件存放的目录
+            'fileDataName': 'fileInput', //设置一个名字，在服务端处理程序中根据该名字来取上传文件的数据。默认为Filedata
+            'queueID': 'fileQueue',//文件队列的ID，该ID与存放文件队列的div的ID一致。
+            'auto': false,//是否选取文件后自动上传
+            'multi': true,//是否支持多文件上传
+            'fileExt': '*.xls',//设置可以选择的文件的类型，格式如：’*.doc;*.pdf;*.rar’
+            'fileDesc': 'Excel文档',// 这个属性值必须设置fileExt属性后才有效，用来设置选择文件对话框中的提示文本
+            'sizeLimit': 1024 * 1024,//最大1M
+            'simUploadLimit': 1,//每次最大上传文件数
+            'buttonImg': 'static/images/preview.png',//按钮上的图片
+            'buttonText': ' ',//按钮上的文字
+            'onComplete': function (event, queueID, fileObj, response, data) {
+                var result = eval("(" + response + ")");
+                var status = result.status;
+                var msg = result.message;
+                if (status == "ok") {
+                    $.messager.alert("提示信息", msg);
+                    $('#importDialog').dialog('close');
+                    $('#t_importdata').datagrid('load', null);
+                } else {
+                    $.messager.alert("提示信息", msg);
+                }
+
+            }
+        });
+
+        $('#uploadBtn').click(function () {
+            var val = $('#templates').combobox('getValue');
+            $('#fileInput').uploadifySettings('scriptData', {'templateId': val});
+            $('#fileInput').uploadifyUpload();
+        });
+
+    });
+
+</script>
+
+</html>

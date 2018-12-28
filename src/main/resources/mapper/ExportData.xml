@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yuan.dao.ExportDao">
+
+    <select id="getStuList" resultType="com.yuan.entity.Student">
+        select t.stunum,t.stuname,t.stuage,t.stusex,t.stubirthday,t.stuhobby
+        from t_importstudent t
+        <if test="sort!=null">
+            order by #{sort}
+        </if>
+        <if test="order!=null">
+            #{order}
+        </if>
+        limit #{currentPage},#{pageSize}
+    </select>
+
+    <select id="getTotal" resultType="int">
+        select count(1) from t_importstudent
+    </select>
+
+</mapper>
